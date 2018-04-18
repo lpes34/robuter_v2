@@ -177,7 +177,7 @@ bool OdometryPublisher::getDistance() {
 
   double distance = sqrt(transform.getOrigin().y() * transform.getOrigin().y() +
                          transform.getOrigin().x() * transform.getOrigin().x());
-  if (distance > 1) {
+  if (distance > 100) {
     return 1;
   } else {
     return 0;
@@ -196,8 +196,8 @@ int main(int argc, char **argv) {
   n.getParam("/pulses_1turn", params.p_turn);
   n.getParam("/base_length", params.length);
 
-  ROS_INFO("\nmsg freq = %d \np_turn = %f\nlength = %d\nradius = %lf",
-           params.msg_freq, params.radius, params.p_turn, params.length);
+  ROS_INFO("\nmsg freq = %d \np_turn = %d\nlength = %lf\nradius = %f",
+           params.msg_freq, params.p_turn, params.length, params.radius);
 
   OdometryPublisher op("pid_data", "odom_wheel", params);
 
