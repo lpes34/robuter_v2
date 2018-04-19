@@ -84,7 +84,7 @@ void OdometryPublisher::pidCallback(const comm_tcp::pid::ConstPtr &msg) {
   xR = (float)pulse1 / _params.p_turn * 2.0f * M_PI;
   xL = (float)pulse2 / _params.p_turn * 2.0f * M_PI;
 
-  dx = _params.radius / 2.0 * (xR + xL);
+  dx = _params.radius / 2.0f * (xR + xL);
   dy = 0.0;
   dth = _params.radius / _params.length * (xR - xL);
 
