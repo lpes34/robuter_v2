@@ -75,6 +75,10 @@ add_executable(r_client_node src/r_client_node.cpp)
 
 target_link_libraries(r_client_node ${catkin_LIBRARIES}) 
 
+add_executable(r_automatic src/r_automatic.cpp)
+
+target_link_libraries(r_automatic ${catkin_LIBRARIES}) 
+
 
               		
 

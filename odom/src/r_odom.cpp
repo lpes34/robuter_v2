@@ -177,7 +177,7 @@ bool OdometryPublisher::getDistance() {
 
   double distance = sqrt(transform.getOrigin().y() * transform.getOrigin().y() +
                          transform.getOrigin().x() * transform.getOrigin().x());
-  if (distance > 100) {
+  if (distance > 0.5) {
     return 1;
   } else {
     return 0;
