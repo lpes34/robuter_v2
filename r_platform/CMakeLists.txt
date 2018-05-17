@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
   cv_bridge
   message_generation
+  tf
 )
 
 
@@ -30,7 +31,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES pointgrey_fl3_ge_28s4_c
-  CATKIN_DEPENDS roscpp std_msgs message_runtime
+  CATKIN_DEPENDS roscpp std_msgs message_runtime tf
 #  DEPENDS system_lib
 )
 
@@ -79,7 +80,13 @@ add_executable(r_automatic src/r_automatic.cpp)
 
 target_link_libraries(r_automatic ${catkin_LIBRARIES}) 
 
+add_executable(r_hybrid src/hybrid.cpp)
 
+target_link_libraries(r_hybrid ${catkin_LIBRARIES}) 
+
+add_executable(test_risk src/test_risk.cpp)
+
+target_link_libraries(test_risk ${catkin_LIBRARIES}) 
               		
 
 ## Add cmake target dependencies of the library

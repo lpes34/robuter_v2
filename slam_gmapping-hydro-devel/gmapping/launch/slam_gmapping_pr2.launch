@@ -1,0 +1,9 @@
+<launch>
+  <param name="use_sim_time" value="true"/>
+  <param name="use_sim_time" value="true" />
+  <node pkg="gmapping" type="slam_gmapping" name="gmapping_thing" output="screen">
+    <remap from="scan" to="youbot/scan_front" />
+    <remap from="base_link" to="youbot/base_link" />
+    <remap from="odom" to="youbot/odom" />
+  </node>
+</launch>
