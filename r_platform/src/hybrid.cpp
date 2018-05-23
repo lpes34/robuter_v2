@@ -50,6 +50,8 @@ private:
 
   void laserDanger(const sensor_msgs::LaserScan::ConstPtr &msg);
 
+  int rad2LaserCoord(float rad, int laser_size);
+
   ros::NodeHandle nh_;
 
   int linear_,
@@ -101,6 +103,12 @@ void TeleopRobonuc::publish_vel_msg() { vel_pub_.publish(vel_msg()); }
 // tentar definir um rate de publicação fixo, e quando entra no loop é que vai
 // fazer subscribe.. Assim garantiam-se os 20 Hz
 
+int TeleopRobonuc::rad2LaserCoord(float rad, int laser_size)
+{
+  int l_coord = round((0.5 + rad / (3 * M_PI)) * laser_size);
+  return l_coord;
+}
+
 void TeleopRobonuc::autoNav(const geometry_msgs::Twist::ConstPtr &vel)
 {
 
@@ -118,27 +126,51 @@ void TeleopRobonuc::laserDanger(const sensor_msgs::LaserScan::ConstPtr &msg)
   float alpha = atan(a_vel / l_vel);
   int n_danger = 0;
 
-  if (l_vel > 0 || (a_vel != 0 & l_vel >= 0))
+  if (l_vel >= 0)
   {
-    for (int i =
-             -size_laser / 6 + round((alpha + M_PI / 2) / M_PI * size_laser);
-         i < size_laser / 6 + round((alpha + M_PI / 2) / M_PI * size_laser);
-         i++)
+    if (l_vel > 0 || a_vel != 0)
     {
-      if (laser[i] < sqrt(l_vel * l_vel + a_vel * a_vel) + 0.1 &&
-          laser[i] > 0.1)
+      // test zone 1
+      for (int i =
+               TeleopRobonuc::rad2LaserCoord(alpha - 2 * M_PI / 3, size_laser);
+           i < TeleopRobonuc::rad2LaserCoord(alpha + 2 * M_PI / 3, size_laser);
+           i++)
       {
-        n_danger++;
+        ROS_INFO("i=%d", i);
+        if (laser[i] < l_vel + 0.1 && laser[i] > 0.1)
+        {
+          n_danger++;
+          ROS_INFO("Zona 1 - Danger");
+        }
       }
+
+      // test zone 2
+      for (int i = TeleopRobonuc::rad2LaserCoord(-M_PI / 2, size_laser);
+           i < TeleopRobonuc::rad2LaserCoord(M_PI / 2, size_laser); i++)
+      {
+        if (laser[i] < 0.37 && laser[i] > 0.1)
+        {
+          n_danger++;
+          ROS_INFO("Zona 2 - Danger");
+        }
+      }
+
+      // Test zone 3
+      // if (alpha < 0)
+      // {
+      //   for (int i = TeleopRobonuc::rad2LaserCoord(11 * M_PI / 18,
+      //   size_laser);
+      //        i < TeleopRobonuc::rad2LaserCoord(3 * M_PI / 4, size_laser);
+      //        i++){
+      //          if (laser[i]<37+4*a_vel/())
+      //        }
+      // }
     }
 
-    ROS_INFO(
-        "numero de leituras = %f , %d\n",
-        laser[-size_laser / 6 + round((alpha + M_PI / 2) / M_PI * size_laser)],
-        n_danger);
     if (n_danger > 5)
     {
       laser_danger_ = true;
+      ROS_INFO("Zona 1 - Danger");
     } // obstáculo na direção do movimento
     else
     {
