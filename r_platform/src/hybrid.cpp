@@ -24,6 +24,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Joy.h>
 #include <vector>
+#include <visualization_msgs/Marker.h>
 
 //=======================================================================================
 //===================================== CLASS
@@ -32,8 +33,7 @@
 
 bool robot_allowed = true;
 
-class TeleopRobonuc
-{
+class TeleopRobonuc {
 public:
   TeleopRobonuc();
 
@@ -52,15 +52,18 @@ private:
 
   int rad2LaserCoord(float rad, int laser_size);
 
+  float LaserCoord2rad(int i, int laser_size);
+
   ros::NodeHandle nh_;
 
   int linear_,
-      angular_;             // id of angular and linear axis (position in the array)
+      angular_; // id of angular and linear axis (position in the array)
   float l_scale_, a_scale_; // linear and angular scale
   ros::Publisher vel_pub_;
   ros::Subscriber vel_sub_;
   ros::Subscriber joy_sub_;
   ros::Subscriber laser_sub_;
+  ros::Publisher vis_pub_;
 
   r_platform::navi vel_msg_;
 
@@ -76,8 +79,7 @@ private:
 };
 
 TeleopRobonuc::TeleopRobonuc()
-    : linear_(1), angular_(3), l_scale_(0.025), a_scale_(0.025)
-{
+    : linear_(1), angular_(3), l_scale_(0.025), a_scale_(0.025) {
 
   vel_pub_ = nh_.advertise<r_platform::navi>("navi_commands", 20);
 
@@ -89,6 +91,8 @@ TeleopRobonuc::TeleopRobonuc()
 
   laser_sub_ = nh_.subscribe<sensor_msgs::LaserScan>(
       "scan", 20, &TeleopRobonuc::laserDanger, this);
+
+  vis_pub_ = nh_.advertise<visualization_msgs::Marker>("/mode", 0);
 }
 
 const r_platform::navi &TeleopRobonuc::vel_msg() const { return vel_msg_; }
@@ -103,42 +107,54 @@ void TeleopRobonuc::publish_vel_msg() { vel_pub_.publish(vel_msg()); }
 // tentar definir um rate de publicação fixo, e quando entra no loop é que vai
 // fazer subscribe.. Assim garantiam-se os 20 Hz
 
-int TeleopRobonuc::rad2LaserCoord(float rad, int laser_size)
-{
-  int l_coord = round((0.5 + rad / (3 * M_PI)) * laser_size);
+int TeleopRobonuc::rad2LaserCoord(float rad, int laser_size) {
+  float rad2 = rad * 2.0;
+  int l_coord = round((0.5 + rad2 / (3 * M_PI)) * laser_size);
   return l_coord;
 }
 
-void TeleopRobonuc::autoNav(const geometry_msgs::Twist::ConstPtr &vel)
-{
+float TeleopRobonuc::LaserCoord2rad(int i, int laser_size) {
+  float ang = (i / laser_size - 0.5) * 3.0 * M_PI / 2;
+
+  return ang;
+}
+
+void TeleopRobonuc::autoNav(const geometry_msgs::Twist::ConstPtr &vel) {
 
   auto_l_vel_ = vel->linear.x;
   auto_a_vel_ = vel->angular.z;
 }
 
-void TeleopRobonuc::laserDanger(const sensor_msgs::LaserScan::ConstPtr &msg)
-{
+void TeleopRobonuc::laserDanger(const sensor_msgs::LaserScan::ConstPtr &msg) {
+  // ros::Time start_time = ros::Time::now();
+
   std::vector<float> laser;
   laser = msg->ranges;
   int size_laser = laser.size();
   float l_vel = joy_l_vel_;
   float a_vel = joy_a_vel_;
-  float alpha = atan(a_vel / l_vel);
+  float alpha = 0.15 * a_vel + 0.68 * l_vel * l_vel;
   int n_danger = 0;
 
   if (l_vel >= 0)
+  // ROS_INFO("vel=%f", l_vel);
   {
-    if (l_vel > 0 || a_vel != 0)
-    {
+    // ROS_INFO(
+    //     "%f - %f = %f", laser[1000],
+    //     0.35 +
+    //         2 * a_vel / (cos(TeleopRobonuc::LaserCoord2rad(1000, size_laser)
+    //         / M_PI / 2)),
+    //     laser[1000] - 0.35 -
+    //         2 * a_vel / (cos(TeleopRobonuc::LaserCoord2rad(1000, size_laser)
+    //         / M_PI / 2)));
+    if (l_vel > 0 || a_vel != 0) {
       // test zone 1
-      for (int i =
-               TeleopRobonuc::rad2LaserCoord(alpha - 2 * M_PI / 3, size_laser);
-           i < TeleopRobonuc::rad2LaserCoord(alpha + 2 * M_PI / 3, size_laser);
-           i++)
-      {
-        ROS_INFO("i=%d", i);
-        if (laser[i] < l_vel + 0.1 && laser[i] > 0.1)
-        {
+      for (int i = TeleopRobonuc::rad2LaserCoord(alpha - M_PI / 8, size_laser);
+           i < TeleopRobonuc::rad2LaserCoord(alpha + M_PI / 8, size_laser);
+           i++) {
+        // ROS_INFO("i=%d", i);
+        if (laser[i] < (l_vel * 0.15 + 0.068 * l_vel * l_vel) * 4.0f + 0.1 &&
+            laser[i] > 0.1) {
           n_danger++;
           ROS_INFO("Zona 1 - Danger");
         }
@@ -146,47 +162,72 @@ void TeleopRobonuc::laserDanger(const sensor_msgs::LaserScan::ConstPtr &msg)
 
       // test zone 2
       for (int i = TeleopRobonuc::rad2LaserCoord(-M_PI / 2, size_laser);
-           i < TeleopRobonuc::rad2LaserCoord(M_PI / 2, size_laser); i++)
-      {
-        if (laser[i] < 0.37 && laser[i] > 0.1)
-        {
+           i < TeleopRobonuc::rad2LaserCoord(M_PI / 2, size_laser); i++) {
+        if (laser[i] < 0.37 && laser[i] > 0.1) {
           n_danger++;
           ROS_INFO("Zona 2 - Danger");
         }
       }
 
       // Test zone 3
-      // if (alpha < 0)
-      // {
-      //   for (int i = TeleopRobonuc::rad2LaserCoord(11 * M_PI / 18,
-      //   size_laser);
-      //        i < TeleopRobonuc::rad2LaserCoord(3 * M_PI / 4, size_laser);
-      //        i++){
-      //          if (laser[i]<37+4*a_vel/())
-      //        }
-      // }
+      if (alpha < 0) {
+        for (int i =
+                 TeleopRobonuc::rad2LaserCoord(11.0 * M_PI / 18.0, size_laser);
+             i < TeleopRobonuc::rad2LaserCoord(3.0 * M_PI / 4.0, size_laser);
+             i++)
+
+        {
+
+          if (laser[i] <
+                  0.35 +
+                      1.5 * -a_vel /
+                          (cos(TeleopRobonuc::LaserCoord2rad(i, size_laser) /
+                               M_PI / 2)) &&
+              laser[i] > 0.1) {
+            n_danger++;
+            ROS_INFO("Zona 3a - Danger");
+          }
+        }
+      }
+
+      if (alpha > 0) {
+        for (int i =
+                 TeleopRobonuc::rad2LaserCoord(-3.0 * M_PI / 4.0, size_laser);
+             i < TeleopRobonuc::rad2LaserCoord(-11.0 * M_PI / 18.0, size_laser);
+             i++) {
+          if (laser[i] <
+              0.35 +
+                  1.5 * a_vel /
+                      (cos(TeleopRobonuc::LaserCoord2rad(i, size_laser) /
+                           -M_PI / 2))) {
+            n_danger++;
+            ROS_INFO("Zona 3b - Danger");
+          }
+        }
+      }
     }
 
-    if (n_danger > 5)
-    {
+    if (n_danger > 5) {
       laser_danger_ = true;
       ROS_INFO("Zona 1 - Danger");
     } // obstáculo na direção do movimento
-    else
-    {
+    else {
       laser_danger_ = false;
     }
+
+    // ros::Time final_time = ros::Time::now();
+    // double dt = (final_time - start_time).toSec();
+
+    // ROS_INFO("%f", dt);
   }
 }
 
-void TeleopRobonuc::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
-{
+void TeleopRobonuc::joyCallback(const sensor_msgs::Joy::ConstPtr &joy) {
 
   r_platform::navi vel_msg;
 
   // decrease velocity rate
-  if (joy->buttons[4] == 1 && a_scale_ > 0 && l_scale_ > 0.0)
-  {
+  if (joy->buttons[4] == 1 && a_scale_ > 0 && l_scale_ > 0.0) {
     l_scale_ = l_scale_ - 0.025;
     a_scale_ = a_scale_ - 0.025;
 
@@ -194,8 +235,7 @@ void TeleopRobonuc::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
   }
 
   // increase velocity rate
-  if (joy->buttons[5] == 1 && a_scale_ < 0.5 && l_scale_ < 0.5)
-  {
+  if (joy->buttons[5] == 1 && a_scale_ < 0.5 && l_scale_ < 0.5) {
     l_scale_ = l_scale_ + 0.025;
     a_scale_ = a_scale_ + 0.025;
 
@@ -204,8 +244,7 @@ void TeleopRobonuc::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
 
   // deadman switch
   // if (joy->buttons[6] == 1)
-  if (joy->axes[2] == -1 & joy->axes[5] == -1)
-  {
+  if (joy->axes[2] == -1 & joy->axes[5] == -1) {
     joy_l_vel_ = l_scale_ * joy->axes[linear_];
     joy_a_vel_ = a_scale_ * joy->axes[angular_];
     mode_ = 1;
@@ -213,34 +252,24 @@ void TeleopRobonuc::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
     // vel_msg_.robot = 0;
 
     if (joy->buttons[0] == 0 && joy->buttons[1] == 0 && joy->buttons[2] == 0 &&
-        joy->buttons[3] == 0 && joy->buttons[7] == 0)
-    {
+        joy->buttons[3] == 0 && joy->buttons[7] == 0) {
       robot_allowed = true;
     }
 
     // Robot Action
-    if (joy->buttons[0] == 1 && robot_allowed)
-    {
+    if (joy->buttons[0] == 1 && robot_allowed) {
       vel_msg_.robot = 1;
       robot_allowed = false;
-    }
-    else if (joy->buttons[1] == 1 && robot_allowed)
-    {
+    } else if (joy->buttons[1] == 1 && robot_allowed) {
       vel_msg_.robot = 2;
       robot_allowed = false;
-    }
-    else if (joy->buttons[2] == 1 && robot_allowed)
-    {
+    } else if (joy->buttons[2] == 1 && robot_allowed) {
       vel_msg_.robot = 3;
       robot_allowed = false;
-    }
-    else if (joy->buttons[3] == 1 && robot_allowed)
-    {
+    } else if (joy->buttons[3] == 1 && robot_allowed) {
       vel_msg_.robot = 4;
       robot_allowed = false;
-    }
-    else if (joy->buttons[7] == 1 && robot_allowed)
-    {
+    } else if (joy->buttons[7] == 1 && robot_allowed) {
       vel_msg_.robot = 5;
       robot_allowed = false;
     }
@@ -253,12 +282,9 @@ void TeleopRobonuc::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
   //     // vel_msg_.robot = 0;
   //   }
   // }
-  else if (joy->axes[2] == -1 & joy->axes[5] == 1)
-  { // Automatic navigation
+  else if (joy->axes[2] == -1 & joy->axes[5] == 1) { // Automatic navigation
     mode_ = 2;
-  }
-  else
-  {
+  } else {
     vel_msg_.linear_vel = 0;
     vel_msg_.angular_vel = 0;
     vel_msg_.robot = 0;
@@ -268,41 +294,69 @@ void TeleopRobonuc::joyCallback(const sensor_msgs::Joy::ConstPtr &joy)
   // vel_pub_.publish(vel_msg);
 }
 
-void TeleopRobonuc::modeDecider(void)
-{
+void TeleopRobonuc::modeDecider(void) {
+
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = "map";
+  marker.header.stamp = ros::Time();
+  marker.ns = "map";
+  marker.id = 0;
+  marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+  marker.action = visualization_msgs::Marker::ADD;
+
+  marker.pose.orientation.w = 1.0;
+
+  marker.scale.z = 0.5;
+  marker.color.a = 1.0; // Don't forget to set the alpha!
+
   if (mode_ == 2) // automatic
   {
     vel_msg_.linear_vel = auto_l_vel_;
     vel_msg_.angular_vel = auto_a_vel_;
+
+    marker.color.r = 0.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;
+
+    marker.text = "Automatic";
   }
 
   else if (mode_ == 1) // manual
   {
-    if (!laser_danger_)
-    {
+    if (!laser_danger_) {
       vel_msg_.linear_vel = joy_l_vel_;
       vel_msg_.angular_vel = joy_a_vel_;
-    }
-    else
-    {
+
+      marker.color.r = 0.0;
+      marker.color.g = 1.0;
+      marker.color.b = 0.0;
+
+      marker.text = "Manual";
+    } else {
       vel_msg_.linear_vel = auto_l_vel_;
       vel_msg_.angular_vel = auto_a_vel_;
+
+      marker.color.r = 1.0;
+      marker.color.g = 0.0;
+      marker.color.b = 0.0;
+      marker.text = "Danger";
     }
   }
 
-  else
-  {
+  else {
     vel_msg_.linear_vel = 0;
     vel_msg_.angular_vel = 0;
   }
+
+  marker.lifetime = ros::Duration(3);
+  vis_pub_.publish(marker);
 }
 //=======================================================================================
 //====================================== MAIN
 //===========================================
 //=======================================================================================
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
 
   ros::init(argc, argv, "teleop_robonuc");
 
@@ -310,8 +364,7 @@ int main(int argc, char **argv)
 
   ros::Rate loop_rate(20);
 
-  while (ros::ok())
-  {
+  while (ros::ok()) {
 
     teleop_robonuc.modeDecider();
 

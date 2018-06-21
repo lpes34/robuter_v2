@@ -10,6 +10,7 @@ Panels:
         - /Map1
         - /Image1
         - /Odometry1
+        - /Odometry1/Shape1
       Splitter Ratio: 0.5
     Tree Height: 775
   - Class: rviz/Selection
@@ -30,7 +31,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: LaserScan
 Visualization Manager:
   Class: ""
   Displays:
@@ -103,7 +104,11 @@ Visualization Manager:
           Value: true
         odom:
           Value: true
+        odom_frame:
+          Value: true
         odom_wheel:
+          Value: true
+        scanmatcher_frame:
           Value: true
       Marker Scale: 1
       Name: TF
@@ -112,16 +117,18 @@ Visualization Manager:
       Show Names: true
       Tree:
         map:
-          odom:
-            base_footprint:
-              base_link:
-                base_stabilized:
-                  base_frame:
-                    laser:
-                      {}
-                    nav:
-                      {}
           odom_wheel:
+            odom_frame:
+              odom:
+                base_footprint:
+                  base_link:
+                    base_stabilized:
+                      base_frame:
+                        laser:
+                          {}
+                        nav:
+                          {}
+          scanmatcher_frame:
             {}
       Update Interval: 0
       Value: true
@@ -173,9 +180,9 @@ Visualization Manager:
         Axes Length: 1
         Axes Radius: 0.100000001
         Color: 255; 25; 0
-        Head Length: 0.300000012
+        Head Length: 0.100000001
         Head Radius: 0.100000001
-        Shaft Length: 1
+        Shaft Length: 0.100000001
         Shaft Radius: 0.0500000007
         Value: Arrow
       Topic: /odom_wheel
