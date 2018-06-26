@@ -50,9 +50,13 @@ private:
 
   void laserDanger(const sensor_msgs::LaserScan::ConstPtr &msg);
 
+  void laserDanger2(const sensor_msgs::LaserScan::ConstPtr &msg);
+
   int rad2LaserCoord(float rad, int laser_size);
 
   float LaserCoord2rad(int i, int laser_size);
+
+  void getLaserParam();
 
   ros::NodeHandle nh_;
 
@@ -63,6 +67,7 @@ private:
   ros::Subscriber vel_sub_;
   ros::Subscriber joy_sub_;
   ros::Subscriber laser_sub_;
+  ros::Subscriber laser2_sub_;
   ros::Publisher vis_pub_;
 
   r_platform::navi vel_msg_;
@@ -75,11 +80,29 @@ private:
 
   bool laser_danger_;
 
+  bool laser2_danger_;
+
+  std::string laser1_;
+
+  std::string laser2_;
+
+  bool a_ = 1;
+
+  bool b_ = 1;
+
   int mode_; // mode==1 -> manual; mode==2->automatic
+
+  ros::Time start_time_;
 };
 
 TeleopRobonuc::TeleopRobonuc()
     : linear_(1), angular_(3), l_scale_(0.025), a_scale_(0.025) {
+
+  // ROS_INFO("primeira laser=%s e a=%d", laser1_.c_str(), a_);
+
+  getLaserParam();
+
+  // ROS_INFO("segunda laser=%s e a=%d", laser1_.c_str(), a_);
 
   vel_pub_ = nh_.advertise<r_platform::navi>("navi_commands", 20);
 
@@ -90,7 +113,10 @@ TeleopRobonuc::TeleopRobonuc()
                                                  &TeleopRobonuc::autoNav, this);
 
   laser_sub_ = nh_.subscribe<sensor_msgs::LaserScan>(
-      "scan", 20, &TeleopRobonuc::laserDanger, this);
+      "scan0", 40, &TeleopRobonuc::laserDanger, this);
+
+  laser2_sub_ = nh_.subscribe<sensor_msgs::LaserScan>(
+      "scan1", 10, &TeleopRobonuc::laserDanger2, this);
 
   vis_pub_ = nh_.advertise<visualization_msgs::Marker>("/mode", 0);
 }
@@ -125,6 +151,12 @@ void TeleopRobonuc::autoNav(const geometry_msgs::Twist::ConstPtr &vel) {
   auto_a_vel_ = vel->angular.z;
 }
 
+void TeleopRobonuc::getLaserParam() {
+  a_ = nh_.getParam("/laser_front", laser1_);
+
+  b_ = nh_.getParam("/laser_back", laser2_);
+}
+
 void TeleopRobonuc::laserDanger(const sensor_msgs::LaserScan::ConstPtr &msg) {
   // ros::Time start_time = ros::Time::now();
 
@@ -156,7 +188,7 @@ void TeleopRobonuc::laserDanger(const sensor_msgs::LaserScan::ConstPtr &msg) {
         if (laser[i] < (l_vel * 0.15 + 0.068 * l_vel * l_vel) * 4.0f + 0.1 &&
             laser[i] > 0.1) {
           n_danger++;
-          ROS_INFO("Zona 1 - Danger");
+          ROS_INFO("Zona 1a - Danger");
         }
       }
 
@@ -165,7 +197,7 @@ void TeleopRobonuc::laserDanger(const sensor_msgs::LaserScan::ConstPtr &msg) {
            i < TeleopRobonuc::rad2LaserCoord(M_PI / 2, size_laser); i++) {
         if (laser[i] < 0.37 && laser[i] > 0.1) {
           n_danger++;
-          ROS_INFO("Zona 2 - Danger");
+          ROS_INFO("Zona 2a - Danger");
         }
       }
 
@@ -185,7 +217,7 @@ void TeleopRobonuc::laserDanger(const sensor_msgs::LaserScan::ConstPtr &msg) {
                                M_PI / 2)) &&
               laser[i] > 0.1) {
             n_danger++;
-            ROS_INFO("Zona 3a - Danger");
+            ROS_INFO("Zona 3a - Danger (alpha negativo)");
           }
         }
       }
@@ -201,7 +233,120 @@ void TeleopRobonuc::laserDanger(const sensor_msgs::LaserScan::ConstPtr &msg) {
                       (cos(TeleopRobonuc::LaserCoord2rad(i, size_laser) /
                            -M_PI / 2))) {
             n_danger++;
-            ROS_INFO("Zona 3b - Danger");
+            ROS_INFO("Zona 3a - Danger (alpha positivo)");
+          }
+        }
+      }
+    }
+
+    // if (l_vel >= 0) {
+    //   if (alpha > 0) { // ACABAr!!!!!!!!!!!!!11
+    //     for (int i = TeleopRobonuc::rad2LaserCoord(M_PI / 2.0, size_laser);
+    //          i < TeleopRobonuc::rad2LaserCoord(-11.0 * M_PI / 18.0,
+    //          size_laser);
+    //          i++) {
+    //       if (laser[i] <
+    //           0.35 +
+    //               1.5 * a_vel /
+    //                   (cos(TeleopRobonuc::LaserCoord2rad(i, size_laser) /
+    //                        -M_PI / 2))) {
+    //         n_danger++;
+    //         ROS_INFO("Zona 3a - Danger");
+    //       }
+    //     }
+    //   }
+    // }
+
+    if (n_danger > 5) {
+      laser_danger_ = true;
+      ROS_INFO("Zona 1 - Danger");
+    } // obstáculo na direção do movimento
+    else {
+      laser_danger_ = false;
+    }
+
+    // ros::Time final_time = ros::Time::now();
+    // double dt = (final_time - start_time).toSec();
+
+    // ROS_INFO("%f", dt);
+  }
+}
+
+void TeleopRobonuc::laserDanger2(const sensor_msgs::LaserScan::ConstPtr &msg) {
+  // ros::Time start_time = ros::Time::now();
+
+  std::vector<float> laser;
+  laser = msg->ranges;
+  int size_laser = laser.size();
+  float l_vel = joy_l_vel_;
+  float a_vel = joy_a_vel_;
+  float alpha = 0.15 * a_vel + 0.68 * l_vel * l_vel;
+  int n_danger = 0;
+
+  if (l_vel <= 0)
+  // ROS_INFO("vel=%f", l_vel);
+  {
+    // ROS_INFO(
+    //     "%f - %f = %f", laser[1000],
+    //     0.35 +
+    //         2 * a_vel / (cos(TeleopRobonuc::LaserCoord2rad(1000, size_laser)
+    //         / M_PI / 2)),
+    //     laser[1000] - 0.35 -
+    //         2 * a_vel / (cos(TeleopRobonuc::LaserCoord2rad(1000, size_laser)
+    //         / M_PI / 2)));
+    if (l_vel < 0 || a_vel != 0) {
+      // test zone 1
+      for (int i = TeleopRobonuc::rad2LaserCoord(alpha - M_PI / 8, size_laser);
+           i < TeleopRobonuc::rad2LaserCoord(alpha + M_PI / 8, size_laser);
+           i++) {
+        // ROS_INFO("i=%d", i);
+        if (laser[i] < -(l_vel * 0.15 + 0.068 * l_vel * l_vel) * 4.0f + 0.1 &&
+            laser[i] > 0.1) {
+          n_danger++;
+          ROS_INFO("Zona 1b - Danger");
+        }
+      }
+
+      // test zone 2
+      for (int i = TeleopRobonuc::rad2LaserCoord(-M_PI / 2, size_laser);
+           i < TeleopRobonuc::rad2LaserCoord(M_PI / 2, size_laser); i++) {
+        if (laser[i] < 0.37 && laser[i] > 0.1) {
+          n_danger++;
+          ROS_INFO("Zona 2b - Danger");
+        }
+      }
+
+      // Test zone 3
+      if (alpha < 0) {
+        for (int i = TeleopRobonuc::rad2LaserCoord(M_PI / 9.0, size_laser);
+             i < TeleopRobonuc::rad2LaserCoord(2.0 * M_PI / 3.0, size_laser);
+             i++)
+
+        {
+
+          if (laser[i] <
+                  0.35 +
+                      1.5 * -a_vel /
+                          (cos(TeleopRobonuc::LaserCoord2rad(i, size_laser) /
+                               M_PI / 2)) &&
+              laser[i] > 0.1) {
+            n_danger++;
+            ROS_INFO("Zona 3b - Danger (alpha negativo)");
+          }
+        }
+      }
+
+      if (alpha > 0) {
+        for (int i =
+                 TeleopRobonuc::rad2LaserCoord(-2.0 * M_PI / 3.0, size_laser);
+             i < TeleopRobonuc::rad2LaserCoord(M_PI / 9.0, size_laser); i++) {
+          if (laser[i] <
+              0.35 +
+                  1.5 * a_vel /
+                      (cos(TeleopRobonuc::LaserCoord2rad(i, size_laser) /
+                           -M_PI / 2))) {
+            n_danger++;
+            ROS_INFO("Zona 3b - Danger (alpha positivo)");
           }
         }
       }
@@ -324,14 +469,23 @@ void TeleopRobonuc::modeDecider(void) {
   else if (mode_ == 1) // manual
   {
     if (!laser_danger_) {
-      vel_msg_.linear_vel = joy_l_vel_;
-      vel_msg_.angular_vel = joy_a_vel_;
 
-      marker.color.r = 0.0;
-      marker.color.g = 1.0;
-      marker.color.b = 0.0;
+      ros::Time final_time = ros::Time::now();
+      double dt = (final_time - start_time_).toSec();
 
-      marker.text = "Manual";
+      if (dt > 1) {
+        vel_msg_.linear_vel = joy_l_vel_;
+        vel_msg_.angular_vel = joy_a_vel_;
+
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+
+        marker.text = "Manual";
+      } else {
+        vel_msg_.linear_vel = 0;
+        vel_msg_.angular_vel = 0;
+      }
     } else {
       vel_msg_.linear_vel = auto_l_vel_;
       vel_msg_.angular_vel = auto_a_vel_;
@@ -340,6 +494,8 @@ void TeleopRobonuc::modeDecider(void) {
       marker.color.g = 0.0;
       marker.color.b = 0.0;
       marker.text = "Danger";
+
+      start_time_ = ros::Time::now();
     }
   }
 
