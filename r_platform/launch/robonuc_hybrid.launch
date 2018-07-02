@@ -7,10 +7,7 @@
 		<param name="deadzone" value="0.12" />
 		<param name="autorepeat_rate" value="20" />
 	</node>
-	<node pkg="r_platform" type="r_hybrid" name="r_hybrid">
-		<param name="laser_front" value="scan0"/>
-		<param name="laser_back" value="scan1"/>
-	</node>
+	<node pkg="r_platform" type="r_hybrid" name="r_hybrid" />
 
 	<node pkg="r_platform" type="decompose_vel" name="decompose_vel" />
 	<node pkg="r_platform" type="r_client_node" name="r_client_node" />
